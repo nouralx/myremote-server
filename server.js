@@ -20,19 +20,19 @@ const wss = new WebSocket.Server({
 const devices = new Map();
 
 function generateId() {
-    let id;
+    let candidate;
 
     do {
-        id = Math.floor(100000 + Math.random() * 900000).toString();
-    } while (devices.has(id));
+        candidate = Math.floor(100000 + Math.random() * 900000).toString();
+    } while (devices.has(candidate));
 
-    return id;
+    return candidate;
 }
 
 wss.on("connection", (ws) => {
 
-    const id = generateId();
-
+    // كل اتصال يحصل على هوية عشوائية مؤقتة فور الاتصال، كما كان سابقًا
+    let id = generateId();
     devices.set(id, ws);
 
     ws.send(JSON.stringify({
@@ -40,13 +40,45 @@ wss.on("connection", (ws) => {
         id: id
     }));
 
-    console.log("Device connected:", id);
+    console.log("Device connected (temporary id):", id);
 
     ws.on("message", (message) => {
 
         try {
 
             const data = JSON.parse(message.toString());
+
+            // -------- طلب استعادة رقم دائم محفوظ مسبقًا (جديد) --------
+            if (data.type === "register") {
+
+                const requestedId = String(data.id);
+
+                const existing = devices.get(requestedId);
+
+                if (existing && existing !== ws && existing.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        type: "error",
+                        message: "This ID is already connected from another session"
+                    }));
+                    return;
+                }
+
+                // إزالة الهوية العشوائية المؤقتة لهذا الاتصال
+                devices.delete(id);
+
+                // اعتماد الهوية الدائمة الجديدة لنفس الاتصال (نفس الـ ws)
+                id = requestedId;
+                devices.set(id, ws);
+
+                ws.send(JSON.stringify({
+                    type: "registered",
+                    id: id
+                }));
+
+                console.log("Device claimed permanent id:", id);
+
+                return;
+            }
 
             // -------- طلب اتصال جديد --------
             if (data.type === "connect") {
@@ -76,7 +108,7 @@ wss.on("connection", (ws) => {
                 }));
             }
 
-            // -------- رد بالقبول أو الرفض (جديد) --------
+            // -------- رد بالقبول أو الرفض --------
             if (data.type === "response") {
 
                 const targetId = String(data.targetId);
