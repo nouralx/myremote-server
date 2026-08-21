@@ -48,19 +48,23 @@ wss.on("connection", (ws) => {
 
             const data = JSON.parse(message.toString());
 
-            // -------- طلب استعادة رقم دائم محفوظ مسبقًا (جديد) --------
+            // -------- طلب استعادة رقم دائم محفوظ مسبقًا --------
             if (data.type === "register") {
 
                 const requestedId = String(data.id);
 
                 const existing = devices.get(requestedId);
 
-                if (existing && existing !== ws && existing.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({
-                        type: "error",
-                        message: "This ID is already connected from another session"
-                    }));
-                    return;
+                // إذا كان الرقم "مستخدَمًا" من اتصال قديم مختلف، نفترض أنه
+                // نفس الجهاز يعيد الاتصال بعد انقطاع، فننهي الاتصال القديم
+                // (الذي غالبًا مات فعليًا ولم يُكتشف بعد) ونعطي الرقم للجديد فورًا
+                if (existing && existing !== ws) {
+                    try {
+                        existing.terminate();
+                    } catch (e) {
+                        // تجاهل أي خطأ أثناء إنهاء الاتصال القديم
+                    }
+                    devices.delete(requestedId);
                 }
 
                 // إزالة الهوية العشوائية المؤقتة لهذا الاتصال
