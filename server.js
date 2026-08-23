@@ -136,6 +136,26 @@ wss.on("connection", (ws) => {
                 }));
             }
 
+            // -------- تمرير إطار شاشة (frame) من المضيف إلى المتحكم --------
+            if (data.type === "frame") {
+
+                const targetId = String(data.targetId);
+
+                const target = devices.get(targetId);
+
+                if (!target || target.readyState !== WebSocket.OPEN) {
+                    // لا نرسل رسالة خطأ هنا لتفادي إغراق الطرف المرسل
+                    // في حال انقطع المتحكم أثناء بث مستمر
+                    return;
+                }
+
+                target.send(JSON.stringify({
+                    type: "frame",
+                    from: id,
+                    data: data.data
+                }));
+            }
+
         } catch (error) {
 
             console.log("Invalid message:", error.message);
