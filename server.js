@@ -144,8 +144,6 @@ wss.on("connection", (ws) => {
                 const target = devices.get(targetId);
 
                 if (!target || target.readyState !== WebSocket.OPEN) {
-                    // لا نرسل رسالة خطأ هنا لتفادي إغراق الطرف المرسل
-                    // في حال انقطع المتحكم أثناء بث مستمر
                     return;
                 }
 
@@ -154,6 +152,28 @@ wss.on("connection", (ws) => {
                     from: id,
                     data: data.data
                 }));
+
+                return;
+            }
+
+            // -------- تمرير عام لأي رسالة تحكم أخرى (فأرة/لوحة مفاتيح) --------
+            // أي نوع رسالة غير معروف أعلاه، طالما يحتوي targetId، يُمرَّر كما هو
+            // مع إضافة "from" -- هذا يجعل إضافة أنواع تحكم جديدة لاحقًا لا تحتاج لمس السيرفر
+            if (data.targetId) {
+
+                const targetId = String(data.targetId);
+                const target = devices.get(targetId);
+
+                if (!target || target.readyState !== WebSocket.OPEN) {
+                    return;
+                }
+
+                const forwarded = Object.assign({}, data, { from: id });
+                delete forwarded.targetId;
+
+                target.send(JSON.stringify(forwarded));
+
+                return;
             }
 
         } catch (error) {
